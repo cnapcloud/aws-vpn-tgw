@@ -166,7 +166,7 @@ aws_vpn_tgw/
    aws acm import-certificate \
      --certificate fileb://tls/server.crt \
      --private-key fileb://tls/server.key \
-     --certificate-chain fileb://root-ca/rootCA.pem \
+     --certificate-chain fileb://tls/ca.crt \
      --region ap-northeast-2
    ```
 
