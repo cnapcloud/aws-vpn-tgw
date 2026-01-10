@@ -206,7 +206,7 @@ aws_vpn_tgw/
 |------|------|--------|------|
 | `aws_region` | AWS 리전 | `ap-northeast-2` | N |
 | `environment` | 환경 이름 | - | **Y** |
-| `project_name` | 프로젝트 이름 | `eks` | N |
+| `project_name` | 프로젝트 이름 | `aws-vpn-tgw` | N |
 | `saml_provider_name` | SAML Provider 이름 | `KeycloakVPN` | **Y** |
 | `saml_metadata_file_path` | SAML 메타데이터 파일 경로 | - | **Y** |
 | **Hub VPC (VPN Hub)** |
@@ -240,7 +240,7 @@ Terraform이 다음 사항을 자동 검증합니다.
 # AWS 기본 설정
 aws_region   = "ap-northeast-2"
 environment  = "prod"
-project_name = "eks"
+project_name = "aws-vpn-tgw"
 
 # Keycloak SAML 설정
 saml_provider_name      = "KeycloakVPN"
