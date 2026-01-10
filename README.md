@@ -11,19 +11,22 @@
   - [1.5 구성 요소](#15-구성-요소)
   - [1.6 아키텍처 (Hub-and-Spoke 토폴로지)](#16-아키텍처-hub-and-spoke-토폴로지)
     - [1.7 라우팅 정책 (Hub-and-Spoke)](#17-라우팅-정책-hub-and-spoke)
-  - [2. 사전 요구사항](#2-사전-요구사항)
-  - [2. Terraform 설정 및 배포](#2-terraform-설정-및-배포)
-    - [2.1 변수 구성](#21-변수-구성)
-    - [2.3 Validation Rules](#23-validation-rules)
-    - [2.4 terraform.tfvars 파일 생성](#24-terraformtfvars-파일-생성)
-    - [2.5 Terraform 배포](#25-terraform-배포)
-  - [3. 클라이언트 설정](#3-클라이언트-설정)
-    - [VPN Client 다운로드 및 설정](#vpn-client-다운로드-및-설정)
-  - [4. 고급 설정](#4-고급-설정)
-    - [4.1 그룹별 접근 제어](#41-그룹별-접근-제어)
-    - [4.2 Self-Service Portal](#42-self-service-portal)
-  - [5. 문제 해결](#5-문제-해결)
-  - [6. 정리](#6-정리)
+  - [2. 사전 준비 사항](#2-사전-준비-사항)
+    - [2.1 Server Certificate (ACM)](#21-server-certificate-acm)
+    - [2.2 SAML Metadata 생성 및 다운로드](#22-saml-metadata-생성-및-다운로드)
+    - [2.3 Hub VPC 정보 (VPN Hub - 필수)](#23-hub-vpc-정보-vpn-hub---필수)
+    - [2.4 Spoke VPCs 정보 (DEV/STG/PRD - Spoke, 선택사항)\*\*](#24-spoke-vpcs-정보-devstgprd---spoke-선택사항)
+  - [3. Terraform 설정 및 배포](#3-terraform-설정-및-배포)
+    - [3.1 변수 구성](#31-변수-구성)
+    - [3.3 Validation Rules](#33-validation-rules)
+    - [3.4 terraform.tfvars 파일 생성](#34-terraformtfvars-파일-생성)
+    - [3.5 Terraform 배포](#35-terraform-배포)
+  - [4. VPN Client 설정](#4-vpn-client-설정)
+  - [5. 고급 설정](#5-고급-설정)
+    - [5.1 그룹별 접근 제어](#51-그룹별-접근-제어)
+    - [5.2 Self-Service Portal](#52-self-service-portal)
+  - [6. 문제 해결](#6-문제-해결)
+  - [7. 정리](#7-정리)
   - [참고자료](#참고자료)
 
 
@@ -149,58 +152,69 @@ aws_vpn_tgw/
    - Stateful Connection Tracking으로 응답 자동 처리
    - VPN Client로의 Return Route 불필요
 
-## 2. 사전 요구사항
+## 2. 사전 준비 사항
 
-1. **Server Certificate (ACM)**
+### 2.1 Server Certificate (ACM)
    
-   AWS Client VPN은 서버 인증서를 필요로 합니다. 다음 방법 중 하나를 선택하세요.
+    AWS Client VPN은 서버 인증서를 필요로 합니다. 다음 방법 중 하나를 선택하세요.
 
-   **방법 1: 로컬 인증서 생성 후 ACM에 import**
-   
-   ```bash
-   # 프로젝트의 certs 디렉토리에서 실행
-   cd cert
-   make install cert  # mkcert 설치 및 인증서 생성
-   
-   # 생성된 인증서를 ACM에 업로드
-   aws acm import-certificate \
-     --certificate fileb://tls/server.crt \
-     --private-key fileb://tls/server.key \
-     --certificate-chain fileb://tls/ca.crt \
-     --region ap-northeast-2
-   ```
+    - 로컬 인증서 생성 후 ACM에 import
+    
+      ```bash
+      # 프로젝트의 certs 디렉토리에서 실행
+      cd cert
+      make install cert  # mkcert 설치 및 인증서 생성
+      
+      # 생성된 인증서를 ACM에 업로드
+      aws acm import-certificate \
+        --certificate fileb://tls/server.crt \
+        --private-key fileb://tls/server.key \
+        --certificate-chain fileb://tls/ca.crt \
+        --region ap-northeast-2
+      ```
 
-   **방법 2: 기존 ACM 인증서 사용**
+   - 기존 ACM 인증서 조회
    
-   ```bash
-   aws acm list-certificates --region ap-northeast-2
-   ```
+      ```bash
+      aws acm list-certificates --region ap-northeast-2
+      ```
 
-  여기서 출력된 Certificate ARN을 terraform.tfvars의 `server_certificate_arn`에 입력하세요.
+    여기서 출력된 Certificate ARN을 terraform.tfvars의 `server_certificate_arn`에 입력하세요.
 
-2. **SAML Metadata 생성 및 다운로드**
+### 2.2 SAML Metadata 생성 및 다운로드
    
-   Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
+    Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
    
-   1. Keycloak에서 VPN용 SAML 클라이언트 생성 (`config/keycloak/aws-vpn-client.json` 파일 import 가능)
-   2. 클라이언트 → Action → Download adaptor configs → "mod-auth-mellon file" 선택
-   3. 다운로드한 ZIP 압축 해제 후 `client/idp-metadata.xml` → `config/idp-metadata.xml`로 복사
+     - Keycloak에서 VPN용 SAML 클라이언트 생성
+       - Keycloak Admin Console에서 새 SAML 클라이언트 생성
+       - 또는 `config/keycloak/aws-vpn-client.json` 파일을 import
 
-3. **Hub VPC 정보 (VPN Hub - 필수)**
+     - SAML 메타데이터 다운로드
+       ```bash
+       curl -s https://keycloak.cnapcloud.com/realms/cnap/protocol/saml/descriptor > \
+               config/keycloak/idp-metadata.xml
+       ```
+
+     - 메타데이터 파일 수정
+       - `config/keycloak/idp-metadata.xml` 파일을 열어 다음 설정 변경:
+       - `WantAuthnRequestsSigned="true"` → `WantAuthnRequestsSigned="false"`
+       - AWS Client VPN은 서명되지 않은 요청만 지원하므로 필수 변경사항입니다.
+
+### 2.3 Hub VPC 정보 (VPN Hub - 필수)
    - VPC ID (`hub_vpc_id`)
    - VPC CIDR (`hub_vpc_cidr`)
    - Primary Subnet ID (`hub_primary_subnet_id`) - Client VPN ENI 배치용
    - Secondary Subnet ID (`hub_secondary_subnet_id`) - HA 구성 권장
    - VPC Route Table ID (`hub_route_table_id`) - Hub-and-Spoke 라우팅용
 
-4. **Spoke VPCs 정보 (DEV/STG/PRD - Spoke, 선택사항)**
+### 2.4 Spoke VPCs 정보 (DEV/STG/PRD - Spoke, 선택사항)**
    - 각 VPC ID와 CIDR (`spoke_vpcs`, `spoke_vpc_cidrs`) - EKS DEV, STG, PRD 등
    - 각 VPC의 Subnet IDs 최소 2개 (`spoke_vpcs[vpc_id]`) - TGW Multi-AZ Attachment용
    - 각 VPC Route Table ID (`spoke_vpc_route_table_ids[vpc_id]`) - Hub-and-Spoke 라우팅용
 
-## 2. Terraform 설정 및 배포
+## 3. Terraform 설정 및 배포
 
-### 2.1 변수 구성
+### 3.1 변수 구성
 
 | 변수 | 설명 | 기본값 | 필수 |
 |------|------|--------|------|
@@ -224,7 +238,7 @@ aws_vpn_tgw/
 | `spoke_vpc_cidrs` | Spoke VPC의 CIDR 맵 (라우팅 및 Authorization Rule용) | `{}` | N |
 | `spoke_vpc_route_table_ids` | Spoke VPC의 Route Table ID 맵 (Hub로 라우트 자동 추가) | `{}` | N |
 
-### 2.3 Validation Rules
+### 3.3 Validation Rules
 
 Terraform이 다음 사항을 자동 검증합니다.
 
@@ -234,7 +248,7 @@ Terraform이 다음 사항을 자동 검증합니다.
   - `spoke_vpc_cidrs`: 모든 CIDR 블록이 유효한 형식
 
 
-### 2.4 terraform.tfvars 파일 생성
+### 3.4 terraform.tfvars 파일 생성
 
 ```hcl
 # AWS 기본 설정
@@ -281,7 +295,7 @@ spoke_vpc_route_table_ids = {
 }
 ```
 
-### 2.5 Terraform 배포
+### 3.5 Terraform 배포
 
 ```bash
 # Terraform 초기화 및 배포
@@ -296,9 +310,7 @@ terraform output vpn_security_group_id
 terraform output transit_gateway_id
 ```
 
-## 3. 클라이언트 설정
-
-### VPN Client 다운로드 및 설정
+## 4. VPN Client 설정
 
 1. AWS 콘솔의 Client VPN Endpoints에서 "Download Client Configuration" 클릭하거나, 다음 명령어로 다운로드:
 
@@ -322,9 +334,10 @@ terraform output transit_gateway_id
    > 브라우저가 자동으로 열려 Keycloak 로그인 페이지로 리다이렉트됩니다.
    > Keycloak 계정으로 인증 후 VPN 연결이 수립됩니다.
 
-## 4. 고급 설정
 
-### 4.1 그룹별 접근 제어
+## 5. 고급 설정
+
+### 5.1 그룹별 접근 제어
 
 기본 구성은 모든 인증된 사용자를 허용합니다. 특정 Keycloak 그룹만 접근하도록 제한하려면 `modules/client_vpn/main.tf`에서 다음과 같이 변경하세요. 참고로 Hub-and-Spoke 아키텍처에서는 모든 트래픽이 VPN Hub VPC를 경유하므로, Hub VPC 접근을 차단하면 다른 VPC들도 자동으로 차단됩니다.
 
@@ -340,7 +353,7 @@ resource "aws_ec2_client_vpn_authorization_rule" "vpc_access" {
 }
 ```
 
-### 4.2 Self-Service Portal
+### 5.2 Self-Service Portal
 
 사용자가 직접 VPN 클라이언트 설정 파일을 다운로드하고 관리할 수 있는 웹 포털입니다. 활성화하면 관리자가 개별적으로 설정 파일을 배포할 필요 없이 사용자가 Self-Service Portal URL을 통해 자신의 VPN 설정을 다운로드할 수 있습니다.
 
@@ -351,7 +364,7 @@ aws ec2 modify-client-vpn-endpoint \
   --region ap-northeast-2
 ```
 
-## 5. 문제 해결
+## 6. 문제 해결
 
 1. VPN 연결 실패
 - Security Group의 443 포트가 열려있는지 확인
@@ -368,7 +381,7 @@ aws ec2 modify-client-vpn-endpoint \
 - Keycloak 그룹 설정 확인
 - SAML 응답의 group attribute 확인
 
-## 6. 정리
+## 7. 정리
 
 다음과 같이 Terraform으로 배포한 리소스를 삭제힙니다.
 
