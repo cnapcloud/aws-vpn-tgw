@@ -7,9 +7,9 @@
     - [1.1 배경](#11-배경)
     - [1.2 Terraform 구성](#12-terraform-구성)
     - [1.3 주요 특징](#13-주요-특징)
-  - [1.4 Terrafom 구성](#14-terrafom-구성)
-  - [1.5 구성 요소](#15-구성-요소)
-  - [1.6 아키텍처 (Hub-and-Spoke 토폴로지)](#16-아키텍처-hub-and-spoke-토폴로지)
+    - [1.4 Terrafom 구성](#14-terrafom-구성)
+    - [1.5 구성 요소](#15-구성-요소)
+    - [1.6 아키텍처 (Hub-and-Spoke 토폴로지)](#16-아키텍처-hub-and-spoke-토폴로지)
     - [1.7 라우팅 정책 (Hub-and-Spoke)](#17-라우팅-정책-hub-and-spoke)
   - [2. 사전 준비 사항](#2-사전-준비-사항)
     - [2.1 Server Certificate (ACM)](#21-server-certificate-acm)
@@ -51,7 +51,7 @@
 - **최소 권한 원칙**: Authorization Rules로 네트워크 세그먼트별 접근 제어
 - **Split Tunnel**: 기업 리소스만 VPN을 통해 라우팅, 인터넷 트래픽은 직접 연결
 
-## 1.4 Terrafom 구성
+### 1.4 Terrafom 구성
 
 ```
 aws_vpn_tgw/
@@ -78,7 +78,7 @@ aws_vpn_tgw/
         └── outputs.tf
 ```
 
-## 1.5 구성 요소
+### 1.5 구성 요소
 
 - **Transit Gateway**: VPN 및 VPC 간 네트워크 라우팅 중앙 허브 (Default Route Table 비활성화, Custom Route Table 사용)
 - **TGW Route Propagation**: VPC CIDR 자동 학습 (각 VPC attachment에서 CIDR을 TGW Route Table로 전파)
@@ -90,7 +90,7 @@ aws_vpn_tgw/
 - **Authorization Rules**: VPN 사용자에 대한 접근 제어 (VPN VPC + Other VPCs)
 - **VPN Routes**: Client VPN에서 TGW를 경유하여 VPC로 트래픽 라우팅
 
-## 1.6 아키텍처 (Hub-and-Spoke 토폴로지)
+### 1.6 아키텍처 (Hub-and-Spoke 토폴로지)
 
 ```
 ┌───────────────────────────────────────────────────────────┐
@@ -144,7 +144,7 @@ aws_vpn_tgw/
    - EKS CICD VPC Route: EKS 환경별 VPC CIDRs → TGW
    - EKS 환경별 VPC Routes: EKS CICD VPC CIDR → TGW
 
-3. **EKS 환경별 VPCs (DEV/STG/PRD) ↔ 서로간**: ❌ 격리 (Spoke)
+3. **EKS 환경별 VPCs (DEV/STG/PRD) ↔ 서로간**: 격리 (Spoke)
    - VPC Route에 다른 Spoke CIDR 없음
    - TGW Propagation은 학습하지만 VPC Route가 없어 통신 불가
 
@@ -155,62 +155,62 @@ aws_vpn_tgw/
 ## 2. 사전 준비 사항
 
 ### 2.1 Server Certificate (ACM)
-   
-    AWS Client VPN은 서버 인증서를 필요로 합니다. 다음 방법 중 하나를 선택하세요.
 
-    - 로컬 인증서 생성 후 ACM에 import
-    
-      ```bash
-      # 프로젝트의 certs 디렉토리에서 실행
-      cd cert
-      make install cert  # mkcert 설치 및 인증서 생성
-      
-      # 생성된 인증서를 ACM에 업로드
-      aws acm import-certificate \
-        --certificate fileb://tls/server.crt \
-        --private-key fileb://tls/server.key \
-        --certificate-chain fileb://tls/ca.crt \
-        --region ap-northeast-2
-      ```
+AWS Client VPN은 서버 인증서를 필요로 합니다. 다음 방법 중 하나를 선택하세요.
 
-   - 기존 ACM 인증서 조회
-   
-      ```bash
-      aws acm list-certificates --region ap-northeast-2
-      ```
+- 로컬 인증서 생성 후 ACM에 import
 
-    여기서 출력된 Certificate ARN을 terraform.tfvars의 `server_certificate_arn`에 입력하세요.
+  ```bash
+  # 프로젝트의 certs 디렉토리에서 실행
+  cd cert
+  make install cert  # mkcert 설치 및 인증서 생성
+  
+  # 생성된 인증서를 ACM에 업로드
+  aws acm import-certificate \
+    --certificate fileb://tls/server.crt \
+    --private-key fileb://tls/server.key \
+    --certificate-chain fileb://tls/ca.crt \
+    --region ap-northeast-2
+  ```
+
+- 기존 ACM 인증서 조회
+
+  ```bash
+  aws acm list-certificates --region ap-northeast-2
+  ```
+
+여기서 출력된 Certificate ARN을 terraform.tfvars의 `server_certificate_arn`에 입력하세요.
 
 ### 2.2 SAML Metadata 생성 및 다운로드
-   
-    Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
-   
-     - Keycloak에서 VPN용 SAML 클라이언트 생성
-       - Keycloak Admin Console에서 새 SAML 클라이언트 생성
-       - 또는 `config/keycloak/aws-vpn-client.json` 파일을 import
 
-     - SAML 메타데이터 다운로드
-       ```bash
-       curl -s https://keycloak.cnapcloud.com/realms/cnap/protocol/saml/descriptor > \
-               config/keycloak/idp-metadata.xml
-       ```
+Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
 
-     - 메타데이터 파일 수정
-       - `config/keycloak/idp-metadata.xml` 파일을 열어 다음 설정 변경:
-       - `WantAuthnRequestsSigned="true"` → `WantAuthnRequestsSigned="false"`
-       - AWS Client VPN은 서명되지 않은 요청만 지원하므로 필수 변경사항입니다.
+- Keycloak에서 VPN용 SAML 클라이언트 생성
+  - Keycloak Admin Console에서 새 SAML 클라이언트 생성
+  - 또는 `config/keycloak/aws-vpn-client.json` 파일을 import
+
+- SAML 메타데이터 다운로드
+  ```bash
+  curl -s https://keycloak.cnapcloud.com/realms/cnap/protocol/saml/descriptor > \
+          config/keycloak/idp-metadata.xml
+  ```
+
+- 메타데이터 파일 수정
+  - `config/keycloak/idp-metadata.xml` 파일을 열어 다음 설정 변경:
+  - `WantAuthnRequestsSigned="true"` → `WantAuthnRequestsSigned="false"`
+  - AWS Client VPN은 서명되지 않은 요청만 지원하므로 필수 변경사항입니다.
 
 ### 2.3 Hub VPC 정보 (VPN Hub - 필수)
-   - VPC ID (`hub_vpc_id`)
-   - VPC CIDR (`hub_vpc_cidr`)
-   - Primary Subnet ID (`hub_primary_subnet_id`) - Client VPN ENI 배치용
-   - Secondary Subnet ID (`hub_secondary_subnet_id`) - HA 구성 권장
-   - VPC Route Table ID (`hub_route_table_id`) - Hub-and-Spoke 라우팅용
+- VPC ID (`hub_vpc_id`)
+- VPC CIDR (`hub_vpc_cidr`)
+- Primary Subnet ID (`hub_primary_subnet_id`) - Client VPN ENI 배치용
+- Secondary Subnet ID (`hub_secondary_subnet_id`) - HA 구성 권장
+- VPC Route Table ID (`hub_route_table_id`) - Hub-and-Spoke 라우팅용
 
 ### 2.4 Spoke VPCs 정보 (DEV/STG/PRD - Spoke, 선택사항)**
-   - 각 VPC ID와 CIDR (`spoke_vpcs`, `spoke_vpc_cidrs`) - EKS DEV, STG, PRD 등
-   - 각 VPC의 Subnet IDs 최소 2개 (`spoke_vpcs[vpc_id]`) - TGW Multi-AZ Attachment용
-   - 각 VPC Route Table ID (`spoke_vpc_route_table_ids[vpc_id]`) - Hub-and-Spoke 라우팅용
+ - 각 VPC ID와 CIDR (`spoke_vpcs`, `spoke_vpc_cidrs`) - EKS DEV, STG, PRD 등
+ - 각 VPC의 Subnet IDs 최소 2개 (`spoke_vpcs[vpc_id]`) - TGW Multi-AZ Attachment용
+ - 각 VPC Route Table ID (`spoke_vpc_route_table_ids[vpc_id]`) - Hub-and-Spoke 라우팅용
 
 ## 3. Terraform 설정 및 배포
 

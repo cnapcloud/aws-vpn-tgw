@@ -1,5 +1,5 @@
 {
-  "clientId": "aws-vpn",
+  "clientId": "urn:amazon:webservices:clientvpn",
   "name": "AWS Client VPN",
   "enabled": true,
   "protocol": "saml",
