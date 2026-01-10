@@ -2,6 +2,7 @@
 .terraform/
 
 # Terraform state files
+*.tfvars
 *.tfstate
 *.tfstate.*
 
