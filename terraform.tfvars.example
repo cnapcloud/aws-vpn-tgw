@@ -19,7 +19,7 @@ hub_route_table_id      = "rtb-xxxxxxxxx"          # Hub VPC Route Table
 vpn_client_cidr_block  = "172.31.0.0/16"
 split_tunnel_enabled   = true
 connection_log_enabled = false
-server_certificate_arn = "arn:aws:acm:ap-northeast-xxxx:certificate/xxxx"
+server_certificate_arn = "arn:aws:acm:ap-northeast-2:xxxx:certificate/xxxx"
 
 # Spoke VPCs Configuration (Hub를 통해 접근할 격리된 환경들)
 spoke_vpcs = {
