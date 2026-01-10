@@ -159,7 +159,7 @@ aws_vpn_tgw/
    
    ```bash
    # 프로젝트의 certs 디렉토리에서 실행
-   cd certs
+   cd cert
    make install cert  # mkcert 설치 및 인증서 생성
    
    # 생성된 인증서를 ACM에 업로드
