@@ -1,0 +1,80 @@
+{
+  "clientId": "aws-vpn",
+  "name": "AWS Client VPN",
+  "enabled": true,
+  "protocol": "saml",
+  "redirectUris": [
+    "http://127.0.0.1:35001",
+    "https://127.0.0.1:35001"
+  ],
+  "attributes": {
+    "saml.authnstatement": "true",
+    "saml.server.signature": "true",
+    "saml.signature.algorithm": "RSA_SHA256",
+    "saml.client.signature": "false",
+    "saml.force.post.binding": "true",
+    "saml_name_id_format": "email",
+    "saml_force_name_id_format": "true",
+    "saml.assertion.signature": "false",
+    "saml.assertion.lifespan": "300",
+    "saml_assertion_consumer_url_post": "http://127.0.0.1:35001",
+    "saml_single_logout_service_url_post": "http://127.0.0.1:35001"
+  },
+  "protocolMappers": [
+    {
+      "name": "email",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "config": {
+        "attribute.nameformat": "Basic",
+        "user.attribute": "email",
+        "friendly.name": "Email",
+        "attribute.name": "email"
+      }
+    },
+    {
+      "name": "username",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "config": {
+        "attribute.nameformat": "Basic",
+        "user.attribute": "username",
+        "friendly.name": "Username",
+        "attribute.name": "username"
+      }
+    },
+    {
+      "name": "firstName",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "config": {
+        "attribute.nameformat": "Basic",
+        "user.attribute": "firstName",
+        "friendly.name": "First Name",
+        "attribute.name": "FirstName"
+      }
+    },
+    {
+      "name": "lastName",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "config": {
+        "attribute.nameformat": "Basic",
+        "user.attribute": "lastName",
+        "friendly.name": "Last Name",
+        "attribute.name": "LastName"
+      }
+    },
+    {
+      "name": "groups",
+      "protocol": "saml",
+      "protocolMapper": "saml-group-membership-mapper",
+      "config": {
+        "attribute.nameformat": "Basic",
+        "single": "false",
+        "full.path": "false",
+        "attribute.name": "memberOf"
+      }
+    }
+  ]
+}

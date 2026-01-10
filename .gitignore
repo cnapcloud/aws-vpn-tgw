@@ -1,0 +1,35 @@
+# Terraform directories
+.terraform/
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+
+# Override files (자동 생성 가능)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+terraform.rc
+.terraformrc
+
+# Sensitive variable files
+# *.tfvars  # 주석 처리하여 형상관리 대상으로 포함
+# *.tfvars.json
+
+# IDE or editor files
+*.swp
+*.swo
+*.idea/
+.vscode/
+*.bak
+
+# Certificates and keys
+*.pem
+*.key
+*.crt

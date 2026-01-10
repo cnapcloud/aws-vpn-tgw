@@ -1,0 +1,383 @@
+# AWS Client VPN with Keycloak SAML & TGW
+
+## 목차
+- [AWS Client VPN with Keycloak SAML \& TGW](#aws-client-vpn-with-keycloak-saml--tgw)
+  - [목차](#목차)
+  - [1. 개요](#1-개요)
+    - [1.1 배경](#11-배경)
+    - [1.2 Terraform 구성](#12-terraform-구성)
+    - [1.3 주요 특징](#13-주요-특징)
+  - [1.4 Terrafom 구성](#14-terrafom-구성)
+  - [1.5 구성 요소](#15-구성-요소)
+  - [1.6 아키텍처 (Hub-and-Spoke 토폴로지)](#16-아키텍처-hub-and-spoke-토폴로지)
+    - [1.7 라우팅 정책 (Hub-and-Spoke)](#17-라우팅-정책-hub-and-spoke)
+  - [2. 사전 요구사항](#2-사전-요구사항)
+  - [2. Terraform 설정 및 배포](#2-terraform-설정-및-배포)
+    - [2.1 변수 구성](#21-변수-구성)
+    - [2.3 Validation Rules](#23-validation-rules)
+    - [2.4 terraform.tfvars 파일 생성](#24-terraformtfvars-파일-생성)
+    - [2.5 Terraform 배포](#25-terraform-배포)
+  - [3. 클라이언트 설정](#3-클라이언트-설정)
+    - [VPN Client 다운로드 및 설정](#vpn-client-다운로드-및-설정)
+  - [4. 고급 설정](#4-고급-설정)
+    - [4.1 그룹별 접근 제어](#41-그룹별-접근-제어)
+    - [4.2 Self-Service Portal](#42-self-service-portal)
+  - [5. 문제 해결](#5-문제-해결)
+  - [6. 정리](#6-정리)
+  - [참고자료](#참고자료)
+
+
+## 1. 개요
+
+이 Terraform 구성은 Keycloak SAML 인증 기반의 AWS Client VPN과 Transit Gateway Hub-and-Spoke 아키텍처를 자동으로 배포합니다.
+
+### 1.1 배경
+
+멀티 환경(DEV/STG/PRD 등)을 운영하는 조직에서는 각 환경을 VPC로 격리하여 보안과 독립성을 유지합니다. 하지만 원격 개발자나 운영자는 필요에 따라 여러 환경에 접근해야 하며, 환경마다 별도의 VPN을 구성하면 관리 복잡도가 증가합니다. 이 구성은 **단일 VPN Endpoint를 통해 중앙 Hub VPC에 연결하고, Transit Gateway를 통해 여러 격리된 VPC 환경에 선택적으로 접근**할 수 있는 Hub-and-Spoke 아키텍처를 제공합니다.
+
+### 1.2 Terraform 구성
+
+이 Terraform 모듈은 **VPN Client → VPN Hub VPC → Multiple VPCs** 구조를 범용적으로 구성할 수 있도록 설계되었습니다. 이 문서에서는 **여러 EKS 클러스터 환경(CICD/DEV/STG/PRD)을 통합 관리하는 시나리오**를 예시로 설명하지만, 실제로는 EKS 외에도 다양한 워크로드(RDS, EC2, Lambda 등)가 있는 멀티 VPC 환경에도 동일하게 적용할 수 있습니다. 원격 사용자는 Keycloak Single Sign-On(SSO)으로 인증하여 각 환경의 리소스에 안전하게 접근할 수 있습니다.
+
+### 1.3 주요 특징
+
+- **페더레이션 인증**: Keycloak SAML 2.0을 통한 중앙 집중식 사용자 인증 및 그룹 기반 접근 제어
+- **Hub-and-Spoke 아키텍처**: VPN Hub VPC를 중앙 허브로 사용하고, Spoke VPC들은 서로 격리
+- **자동화된 라우팅**: Transit Gateway 전파와 VPC Route Table을 통한 동적 라우팅
+- **멀티 VPC 지원**: 단일 VPN으로 여러 VPC 환경(DEV/STG/PRD 등)에 접근
+- **최소 권한 원칙**: Authorization Rules로 네트워크 세그먼트별 접근 제어
+- **Split Tunnel**: 기업 리소스만 VPN을 통해 라우팅, 인터넷 트래픽은 직접 연결
+
+## 1.4 Terrafom 구성
+
+```
+aws_vpn_tgw/
+├── certs
+|   ├── root-ca
+|   └── tls  
+├── config/
+│   └── keycloak
+|       ├── idp-metadata.xml       # Keycloak SAML 메타데이터 파일
+|       └── aws-vpn-client.json    # Keycloak Client 구성         
+├── main.tf                        # 루트 모듈 (VPN + TGW)
+├── variables.tf                   # 입력 변수 정의
+├── outputs.tf                     # 출력값
+├── terraform.tfvars               # 실제 환경 설정
+├── README.md                      # 이 파일
+└── modules/
+    ├── client_vpn/                # Client VPN 모듈
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── transit_gateway/           # Transit Gateway 모듈
+        ├── main.tf
+        ├── variables.tf
+        └── outputs.tf
+```
+
+## 1.5 구성 요소
+
+- **Transit Gateway**: VPN 및 VPC 간 네트워크 라우팅 중앙 허브 (Default Route Table 비활성화, Custom Route Table 사용)
+- **TGW Route Propagation**: VPC CIDR 자동 학습 (각 VPC attachment에서 CIDR을 TGW Route Table로 전파)
+- **VPC Route Tables**: Hub-and-Spoke 토폴로지 구현 (VPN VPC ↔ Other VPCs만 허용, Other VPCs 간 격리)
+- **SAML Provider**: Keycloak의 SAML 메타데이터를 기반으로 AWS IAM SAML Provider 생성
+- **Security Group**: VPN 트래픽용 보안 그룹 (Ingress 규칙 불필요, VPN Endpoint가 자동 관리)
+- **Client VPN Endpoint**: SAML 인증을 사용하는 Client VPN Endpoint
+- **Target Network Associations**: VPC 서브넷과의 연결 (고가용성을 위해 2개 AZ)
+- **Authorization Rules**: VPN 사용자에 대한 접근 제어 (VPN VPC + Other VPCs)
+- **VPN Routes**: Client VPN에서 TGW를 경유하여 VPC로 트래픽 라우팅
+
+## 1.6 아키텍처 (Hub-and-Spoke 토폴로지)
+
+```
+┌───────────────────────────────────────────────────────────┐
+│              VPN Clients (172.31.0.0/16)                  │
+│                                                           │
+│  ┌──────────────────────────────────────────────────-──┐  │
+│  │  Client VPN Endpoint                                │  │
+│  │  (Keycloak SAML Authentication)                     │  │
+│  │  - Authorization: 10.0.0.0/16, 10.1.0.0/16..        │  │
+│  │  - Routes: All VPCs via TGW                         │  │
+│  └───────────────────────────────────────────────────-─┘  │
+└──────────────────────────┬──────────────────────────-─────┘
+                           │
+                           │ EKS CICD VPC Subnet (Target Network)
+                           ▼
+              ┌─────────────────────────────────┐
+              │ EKS CICD VPC (VPN Hub)          │◄───┐
+              │      (10.0.0.0/16)              │    │
+              │ TGW Attachment                  │    │
+              │ Route:                          │    │
+              │   10.1/16,10.2/16,10.3/16 → TGW │    │
+              └────────────┬────────────────────┘    │
+                           │                         │
+                           ▼                         │
+        ┌──────────────────────────────────┐         │
+        │     Transit Gateway (TGW)        │         │
+        │  ┌────────────────────────────┐  │         │
+        │  │  Custom TGW Route Table    │  │         │
+        │  │  - VPC Propagation: ON     │  │         │
+        │  │    (10.0/16, 10.1/16..)    │  │         │
+        │  └────────────────────────────┘  │         │
+        └────┬──────────────┬──────────┬───┘         │
+             │              │          │             │
+      ┌──────▼──────┐┌──────▼──────┐┌──▼────────┐    │
+      │ EKS DEV VPC ││ EKS STG VPC ││EKS PRD VPC│    │
+      │ 10.1.0.0/16 ││ 10.2.0.0/16 ││10.3.0.0/16│    │
+      │ Attachment  ││ Attachment  ││Attachment │    │
+      │ Route:      ││ Route:      ││Route:     │    │
+      │ 10.0/16→TGW ││ 10.0/16→TGW ││10.0/16→TGW│───-┘
+      └─────────────┘└─────────────┘└───────────┘
+        (ISOLATED) X (ISOLATED) X (ISOLATED)
+```
+
+### 1.7 라우팅 정책 (Hub-and-Spoke)
+
+1. **VPN Client → All VPCs**: ✅ 허용
+   - Client VPN Routes: 각 VPC CIDR → TGW
+   - Authorization Rules로 접근 제어
+
+2. **EKS CICD VPC (Hub) ↔ EKS 환경별 VPCs (DEV/STG/PRD - Spoke)**: ✅ 허용
+   - EKS CICD VPC Route: EKS 환경별 VPC CIDRs → TGW
+   - EKS 환경별 VPC Routes: EKS CICD VPC CIDR → TGW
+
+3. **EKS 환경별 VPCs (DEV/STG/PRD) ↔ 서로간**: ❌ 격리 (Spoke)
+   - VPC Route에 다른 Spoke CIDR 없음
+   - TGW Propagation은 학습하지만 VPC Route가 없어 통신 불가
+
+4. **Response Traffic**: ✅ 자동
+   - Stateful Connection Tracking으로 응답 자동 처리
+   - VPN Client로의 Return Route 불필요
+
+## 2. 사전 요구사항
+
+1. **Server Certificate (ACM)**
+   
+   AWS Client VPN은 서버 인증서를 필요로 합니다. 다음 방법 중 하나를 선택하세요.
+
+   **방법 1: 로컬 인증서 생성 후 ACM에 import**
+   
+   ```bash
+   # 프로젝트의 certs 디렉토리에서 실행
+   cd certs
+   make install cert  # mkcert 설치 및 인증서 생성
+   
+   # 생성된 인증서를 ACM에 업로드
+   aws acm import-certificate \
+     --certificate fileb://tls/server.crt \
+     --private-key fileb://tls/server.key \
+     --certificate-chain fileb://root-ca/rootCA.pem \
+     --region ap-northeast-2
+   ```
+
+   **방법 2: 기존 ACM 인증서 사용**
+   
+   ```bash
+   aws acm list-certificates --region ap-northeast-2
+   ```
+
+  여기서 출력된 Certificate ARN을 terraform.tfvars의 `server_certificate_arn`에 입력하세요.
+
+2. **SAML Metadata 생성 및 다운로드**
+   
+   Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
+   
+   1. Keycloak에서 VPN용 SAML 클라이언트 생성 (`config/keycloak/aws-vpn-client.json` 파일 import 가능)
+   2. 클라이언트 → Action → Download adaptor configs → "mod-auth-mellon file" 선택
+   3. 다운로드한 ZIP 압축 해제 후 `client/idp-metadata.xml` → `config/idp-metadata.xml`로 복사
+
+3. **Hub VPC 정보 (VPN Hub - 필수)**
+   - VPC ID (`hub_vpc_id`)
+   - VPC CIDR (`hub_vpc_cidr`)
+   - Primary Subnet ID (`hub_primary_subnet_id`) - Client VPN ENI 배치용
+   - Secondary Subnet ID (`hub_secondary_subnet_id`) - HA 구성 권장
+   - VPC Route Table ID (`hub_route_table_id`) - Hub-and-Spoke 라우팅용
+
+4. **Spoke VPCs 정보 (DEV/STG/PRD - Spoke, 선택사항)**
+   - 각 VPC ID와 CIDR (`spoke_vpcs`, `spoke_vpc_cidrs`) - EKS DEV, STG, PRD 등
+   - 각 VPC의 Subnet IDs 최소 2개 (`spoke_vpcs[vpc_id]`) - TGW Multi-AZ Attachment용
+   - 각 VPC Route Table ID (`spoke_vpc_route_table_ids[vpc_id]`) - Hub-and-Spoke 라우팅용
+
+## 2. Terraform 설정 및 배포
+
+### 2.1 변수 구성
+
+| 변수 | 설명 | 기본값 | 필수 |
+|------|------|--------|------|
+| `aws_region` | AWS 리전 | `ap-northeast-2` | N |
+| `environment` | 환경 이름 | - | **Y** |
+| `project_name` | 프로젝트 이름 | `eks` | N |
+| `saml_provider_name` | SAML Provider 이름 | `KeycloakVPN` | **Y** |
+| `saml_metadata_file_path` | SAML 메타데이터 파일 경로 | - | **Y** |
+| **Hub VPC (VPN Hub)** |
+| `hub_vpc_id` | Hub VPC ID (VPN이 배포되는 중앙 허브) | - | **Y** |
+| `hub_vpc_cidr` | Hub VPC CIDR 블록 | - | **Y** |
+| `hub_route_table_id` | Hub VPC Route Table ID | - | **Y** |
+| `hub_primary_subnet_id` | Hub VPC Primary Subnet ID | - | **Y** |
+| `hub_secondary_subnet_id` | Hub VPC Secondary Subnet ID (HA) | `null` | N |
+| `vpn_client_cidr_block` | VPN 클라이언트 IP 대역 | `172.31.0.0/16` | N |
+| `server_certificate_arn` | ACM 인증서 ARN | - | **Y** |
+| `split_tunnel_enabled` | Split Tunnel 활성화 | `true` | N |
+| `connection_log_enabled` | 연결 로깅 활성화 | `false` | N |
+| **Spoke VPCs (선택사항 - 멀티 VPC 구성 시)** |
+| `spoke_vpcs` | Spoke VPC와 서브넷 맵 (각 VPC 최소 2개 서브넷) | `{}` | N |
+| `spoke_vpc_cidrs` | Spoke VPC의 CIDR 맵 (라우팅 및 Authorization Rule용) | `{}` | N |
+| `spoke_vpc_route_table_ids` | Spoke VPC의 Route Table ID 맵 (Hub로 라우트 자동 추가) | `{}` | N |
+
+### 2.3 Validation Rules
+
+Terraform이 다음 사항을 자동 검증합니다.
+
+- `vpn_client_cidr_block`: 유효한 CIDR 블록
+- **멀티 VPC 구성 시에만 적용:**
+  - `spoke_vpcs`: 각 Spoke VPC는 최소 2개 서브넷 필요 (TGW Multi-AZ 요구사항)
+  - `spoke_vpc_cidrs`: 모든 CIDR 블록이 유효한 형식
+
+
+### 2.4 terraform.tfvars 파일 생성
+
+```hcl
+# AWS 기본 설정
+aws_region   = "ap-northeast-2"
+environment  = "prod"
+project_name = "eks"
+
+# Keycloak SAML 설정
+saml_provider_name      = "KeycloakVPN"
+saml_metadata_file_path = "${path.module}/config/idp-metadata.xml"
+
+# Hub VPC 설정 (VPN Hub)
+hub_vpc_id              = "vpc-xxxxx"       # Hub VPC ID
+hub_vpc_cidr            = "10.0.0.0/16"
+hub_route_table_id      = "rtb-xxxxx"      # Hub VPC Route Table
+hub_primary_subnet_id   = "subnet-xxxxx"   # 최소 1개 필요
+hub_secondary_subnet_id = "subnet-yyyyy"   # HA 구성 권장
+
+# VPN 클라이언트 설정
+vpn_client_cidr_block  = "172.31.0.0/16"
+split_tunnel_enabled   = true
+connection_log_enabled = false
+server_certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/xxxxx"
+
+# Transit Gateway - Spoke VPC 구성 (DEV/STG/PRD)
+spoke_vpcs = {
+  "vpc-11111" = ["subnet-aaaaa", "subnet-bbbbb"]  # EKS DEV VPC (Spoke)
+  "vpc-22222" = ["subnet-ccccc", "subnet-ddddd"]  # EKS STG VPC (Spoke)
+  "vpc-33333" = ["subnet-eeeee", "subnet-fffff"]  # EKS PRD VPC (Spoke)
+}
+
+# Spoke VPC의 CIDR (라우팅 및 Authorization Rule 생성용)
+spoke_vpc_cidrs = {
+  "vpc-11111" = "10.1.0.0/16"  # EKS DEV VPC (Spoke)
+  "vpc-22222" = "10.2.0.0/16"  # EKS STG VPC (Spoke)
+  "vpc-33333" = "10.3.0.0/16"  # EKS PRD VPC (Spoke)
+}
+
+# Spoke VPC의 Route Table ID (Hub로 라우트 자동 추가)
+spoke_vpc_route_table_ids = {
+  "vpc-11111" = "rtb-aaaaa"  # EKS DEV VPC Route Table
+  "vpc-22222" = "rtb-ccccc"  # EKS STG VPC Route Table
+  "vpc-33333" = "rtb-eeeee"  # EKS PRD VPC Route Table
+}
+```
+
+### 2.5 Terraform 배포
+
+```bash
+# Terraform 초기화 및 배포
+terraform init 
+terraform plan 
+terraform apply
+
+# 배포 완료 후 출력값 확인
+terraform output client_vpn_endpoint_id
+terraform output saml_provider_arn
+terraform output vpn_security_group_id
+terraform output transit_gateway_id
+```
+
+## 3. 클라이언트 설정
+
+### VPN Client 다운로드 및 설정
+
+1. AWS 콘솔의 Client VPN Endpoints에서 "Download Client Configuration" 클릭하거나, 다음 명령어로 다운로드:
+
+   ```bash
+   # Endpoint ID 확인
+   CLIENT_VPN_ID=$(terraform output -raw client_vpn_endpoint_id)
+   
+   # VPN Configuration 다운로드
+   aws ec2 export-client-vpn-client-configuration \
+     --client-vpn-endpoint-id $CLIENT_VPN_ID \
+     --output text \
+     --region ap-northeast-2 > client-config.ovpn
+   ```
+
+2. VPN 클라이언트 애플리케이션 설치 ([AWS Client VPN 다운로드](https://aws.amazon.com/vpn/client-vpn-download/))
+
+3. 다운로드한 `client-config.ovpn` 설정 파일로 VPN 연결 생성
+
+4. VPN 연결 시 Keycloak 계정으로 SAML 인증
+
+   > 브라우저가 자동으로 열려 Keycloak 로그인 페이지로 리다이렉트됩니다.
+   > Keycloak 계정으로 인증 후 VPN 연결이 수립됩니다.
+
+## 4. 고급 설정
+
+### 4.1 그룹별 접근 제어
+
+기본 구성은 모든 인증된 사용자를 허용합니다. 특정 Keycloak 그룹만 접근하도록 제한하려면 `modules/client_vpn/main.tf`에서 다음과 같이 변경하세요. 참고로 Hub-and-Spoke 아키텍처에서는 모든 트래픽이 VPN Hub VPC를 경유하므로, Hub VPC 접근을 차단하면 다른 VPC들도 자동으로 차단됩니다.
+
+```hcl
+# authorize_all_groups = true 를 access_group_id로 변경
+resource "aws_ec2_client_vpn_authorization_rule" "vpc_access" {
+  client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.keycloak.id
+  target_network_cidr    = var.vpc_cidr
+  access_group_id        = "vpn-users"  # Keycloak 그룹명
+  description            = "Allow vpn-users group to VPN VPC"
+  
+  depends_on = [aws_ec2_client_vpn_network_association.primary]
+}
+```
+
+### 4.2 Self-Service Portal
+
+사용자가 직접 VPN 클라이언트 설정 파일을 다운로드하고 관리할 수 있는 웹 포털입니다. 활성화하면 관리자가 개별적으로 설정 파일을 배포할 필요 없이 사용자가 Self-Service Portal URL을 통해 자신의 VPN 설정을 다운로드할 수 있습니다.
+
+```bash
+aws ec2 modify-client-vpn-endpoint \
+  --client-vpn-endpoint-id $(terraform output -raw client_vpn_endpoint_id) \
+  --self-service-portal enabled \
+  --region ap-northeast-2
+```
+
+## 5. 문제 해결
+
+1. VPN 연결 실패
+- Security Group의 443 포트가 열려있는지 확인
+- `config/idp-metadata.xml` 파일이 올바른 메타데이터를 포함하는지 확인
+- ACM 인증서가 유효하고 올바른 ARN인지 확인
+
+2. SAML 인증 실패
+- `config/idp-metadata.xml` 메타데이터가 현재 Keycloak 설정과 일치하는지 확인
+- Keycloak의 SAML 클라이언트 설정 확인
+- Keycloak 사용자가 적절한 그룹에 속해있는지 확인
+
+4. 접근 권한 오류
+- Authorization Rule 설정 확인
+- Keycloak 그룹 설정 확인
+- SAML 응답의 group attribute 확인
+
+## 6. 정리
+
+다음과 같이 Terraform으로 배포한 리소스를 삭제힙니다.
+
+```bash
+terraform destroy
+```
+
+## 참고자료
+
+- [AWS Client VPN Endpoint Documentation](https://docs.aws.amazon.com/vpn/latest/clientvpn-user/)
+- [AWS IAM SAML Provider](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_saml.html)
+- [Keycloak SAML Documentation](https://www.keycloak.org/docs/latest/server_admin/#saml)
