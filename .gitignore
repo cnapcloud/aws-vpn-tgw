@@ -34,4 +34,4 @@ terraform.rc
 *.pem
 *.key
 *.crt
-/pki/**
+/cert/pki/**
