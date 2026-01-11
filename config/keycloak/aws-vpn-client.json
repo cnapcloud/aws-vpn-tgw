@@ -1,30 +1,69 @@
 {
   "clientId": "urn:amazon:webservices:clientvpn",
   "name": "AWS Client VPN",
+  "description": "",
+  "surrogateAuthRequired": false,
   "enabled": true,
-  "protocol": "saml",
+  "alwaysDisplayInConsole": false,
+  "clientAuthenticatorType": "client-secret",
+  "secret": "Qk2KwdCumnIyO48VLz8WVd03EEIHvGM4",
   "redirectUris": [
     "http://127.0.0.1:35001",
     "https://127.0.0.1:35001"
   ],
+  "webOrigins": [
+    "http://127.0.0.1:35001",
+    "https://127.0.0.1:35001"
+  ],
+  "notBefore": 0,
+  "bearerOnly": false,
+  "consentRequired": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "publicClient": false,
+  "frontchannelLogout": true,
+  "protocol": "saml",
   "attributes": {
-    "saml.authnstatement": "true",
-    "saml.server.signature": "true",
-    "saml.signature.algorithm": "RSA_SHA256",
-    "saml.client.signature": "false",
-    "saml.force.post.binding": "true",
-    "saml_name_id_format": "email",
-    "saml_force_name_id_format": "true",
     "saml.assertion.signature": "true",
-    "saml.assertion.lifespan": "300",
+    "client.secret.creation.time": "1768123004",
+    "saml.force.post.binding": "true",
+    "saml_single_logout_service_url_post": "http://127.0.0.1:35001",
+    "saml.encrypt": "false",
     "saml_assertion_consumer_url_post": "http://127.0.0.1:35001",
-    "saml_single_logout_service_url_post": "http://127.0.0.1:35001"
+    "saml.server.signature": "true",
+    "saml.artifact.binding.identifier": "WplOklJJYwvNWMjz/f2p/h3ykkU=",
+    "saml.signature.algorithm": "RSA_SHA256",
+    "saml_force_name_id_format": "true",
+    "saml.client.signature": "false",
+    "saml.authnstatement": "true",
+    "saml.assertion.lifespan": "300",
+    "saml_name_id_format": "email",
+    "saml.allow.ecp.flow": "false",
+    "saml_signature_canonicalization_method": "http://www.w3.org/2001/10/xml-exc-c14n#"
   },
+  "authenticationFlowBindingOverrides": {},
+  "fullScopeAllowed": true,
+  "nodeReRegistrationTimeout": -1,
   "protocolMappers": [
+    {
+      "name": "lastName",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "attribute.nameformat": "Basic",
+        "user.attribute": "lastName",
+        "friendly.name": "Last Name",
+        "attribute.name": "LastName"
+      }
+    },
     {
       "name": "email",
       "protocol": "saml",
       "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
       "config": {
         "attribute.nameformat": "Basic",
         "user.attribute": "email",
@@ -36,6 +75,7 @@
       "name": "username",
       "protocol": "saml",
       "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
       "config": {
         "attribute.nameformat": "Basic",
         "user.attribute": "username",
@@ -44,37 +84,35 @@
       }
     },
     {
+      "name": "groups",
+      "protocol": "saml",
+      "protocolMapper": "saml-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "single": "false",
+        "attribute.nameformat": "Basic",
+        "full.path": "false",
+        "attribute.name": "memberOf"
+      }
+    },
+    {
       "name": "firstName",
       "protocol": "saml",
       "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
       "config": {
         "attribute.nameformat": "Basic",
         "user.attribute": "firstName",
         "friendly.name": "First Name",
         "attribute.name": "FirstName"
       }
-    },
-    {
-      "name": "lastName",
-      "protocol": "saml",
-      "protocolMapper": "saml-user-property-mapper",
-      "config": {
-        "attribute.nameformat": "Basic",
-        "user.attribute": "lastName",
-        "friendly.name": "Last Name",
-        "attribute.name": "LastName"
-      }
-    },
-    {
-      "name": "groups",
-      "protocol": "saml",
-      "protocolMapper": "saml-group-membership-mapper",
-      "config": {
-        "attribute.nameformat": "Basic",
-        "single": "false",
-        "full.path": "false",
-        "attribute.name": "memberOf"
-      }
     }
-  ]
+  ],
+  "defaultClientScopes": [],
+  "optionalClientScopes": [],
+  "access": {
+    "view": true,
+    "configure": true,
+    "manage": true
+  }
 }

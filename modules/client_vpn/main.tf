@@ -43,6 +43,7 @@ resource "aws_ec2_client_vpn_endpoint" "keycloak" {
 
   connection_log_options {
     enabled = var.connection_log_enabled
+    cloudwatch_log_group  = "/aws/clientvpn/cvpn-endpoint"
   }
 
   security_group_ids = [aws_security_group.vpn_sg.id]

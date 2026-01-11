@@ -192,6 +192,7 @@ Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
 
 - Keycloak에서 VPN용 SAML 클라이언트 생성
   - Keycloak Admin Console에서 새 SAML 클라이언트 생성
+    (client scopes에 role-list가 있는 경우, 매핑 에러가 발생함으로 반드시 제거 필요)
   - 또는 `config/keycloak/aws-vpn-client.json` 파일을 import
 
 - SAML 메타데이터 다운로드
@@ -450,6 +451,9 @@ aws ec2 modify-client-vpn-endpoint \
 - Authorization Rule 설정 확인
 - Keycloak 그룹 설정 확인
 - SAML 응답의 group attribute 확인
+
+5. 방화벽 설정
+- client vpn에서 접근하는 자원에 대한 방확의 소스 keycloak-vpn-sg 설정
 
 ## 7. 정리
 
