@@ -29,6 +29,17 @@ resource "aws_security_group" "vpn_sg" {
   }
 }
 
+# CloudWatch Log Group for Client VPN
+resource "aws_cloudwatch_log_group" "vpn_logs" {
+  name              = "/aws/clientvpn/${var.environment}-keycloak-vpn"
+  retention_in_days = 30
+  
+  tags = {
+    Name        = "keycloak-vpn-logs"
+    Environment = var.environment
+  }
+}
+
 # Client VPN Endpoint
 resource "aws_ec2_client_vpn_endpoint" "keycloak" {
   description            = "Keycloak-based Client VPN Endpoint"
@@ -42,8 +53,8 @@ resource "aws_ec2_client_vpn_endpoint" "keycloak" {
   }
 
   connection_log_options {
-    enabled = var.connection_log_enabled
-    cloudwatch_log_group  = "/aws/clientvpn/cvpn-endpoint"
+    enabled              = var.connection_log_enabled
+    cloudwatch_log_group = aws_cloudwatch_log_group.vpn_logs.name
   }
 
   security_group_ids = [aws_security_group.vpn_sg.id]
@@ -56,6 +67,11 @@ resource "aws_ec2_client_vpn_endpoint" "keycloak" {
 
   depends_on = [aws_iam_saml_provider.keycloak_vpn]
 }
+
+
+
+
+
 
 # Target Network Associations
 resource "aws_ec2_client_vpn_network_association" "primary" {

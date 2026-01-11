@@ -19,7 +19,8 @@
   - [3. Terraform 설정 및 배포](#3-terraform-설정-및-배포)
     - [3.1 변수 구성](#31-변수-구성)
     - [3.3 Validation Rules](#33-validation-rules)
-    - [3.4 terraform.tfvars 파일 생성](#34-terraformtfvars-파일-생성)
+    - [3.4 CloudWatch 로그 그룹 설정](#34-cloudwatch-로그-그룹-설정)
+    - [3.5 terraform.tfvars 파일 생성](#35-terraformtfvars-파일-생성)
     - [3.5 Terraform 배포](#35-terraform-배포)
   - [4. VPN Client 설정](#4-vpn-client-설정)
     - [4.1 VPN 설정 파일 다운로드](#41-vpn-설정-파일-다운로드)
@@ -253,8 +254,24 @@ Terraform이 다음 사항을 자동 검증합니다.
   - `spoke_vpcs`: 각 Spoke VPC는 최소 2개 서브넷 필요 (TGW Multi-AZ 요구사항)
   - `spoke_vpc_cidrs`: 모든 CIDR 블록이 유효한 형식
 
+### 3.4 CloudWatch 로그 그룹 설정
 
-### 3.4 terraform.tfvars 파일 생성
+Client VPN 연결 로그를 위한 CloudWatch 로그 그룹이 자동으로 생성됩니다.
+- **로그 그룹명**: `/aws/clientvpn/${var.environment}-keycloak-vpn`
+- **보관 기간**: 30일
+- **자동 관리**: Terraform이 생성 및 삭제를 자동으로 처리합니다
+
+기존에 동일한 이름의 로그 그룹이 존재하는 경우, Terraform 배포 전에 수동으로 삭제하거나 `terraform import` 명령어를 사용하여 기존 리소스를 Terraform 상태에 추가할 수 있습니다.
+
+```bash
+# 기존 로그 그룹 삭제 (필요한 경우)
+aws logs delete-log-group --log-group-name "/aws/clientvpn/prod-keycloak-vpn" --region ap-northeast-2
+
+# 또는 기존 로그 그룹 import (필요한 경우)
+terraform import 'module.client_vpn.aws_cloudwatch_log_group.vpn_logs' "/aws/clientvpn/prod-keycloak-vpn"
+```
+
+### 3.5 terraform.tfvars 파일 생성
 
 ```hcl
 # AWS 기본 설정
