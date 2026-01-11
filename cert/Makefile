@@ -8,8 +8,8 @@ TLS_DIR := ./tls
 TLS_NAME := server
 
 # Certificate domains (can be overridden with environment variable)
-COMMON_NAME ?= vpn.cnapcloud.com
-ALT_NAMES ?= DNS:$(COMMON_NAME)
+COMMON_NAME ?= aws-vpn-dev
+ALT_NAMES ?= DNS:$(COMMON_NAME),DNS:ovpn.cnapcloud.com
 
 deps: ## Install required system dependencies
 ifeq ($(OS),linux)

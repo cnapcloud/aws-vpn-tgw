@@ -36,5 +36,9 @@ terraform.rc
 *.crt
 /cert/pki/**
 
+# macOS specific files
 .DS_Store
 **/.DS_Store
+
+# ovpn_files
+*.ovpn

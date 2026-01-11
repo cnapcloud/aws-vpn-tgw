@@ -22,6 +22,11 @@
     - [3.4 terraform.tfvars 파일 생성](#34-terraformtfvars-파일-생성)
     - [3.5 Terraform 배포](#35-terraform-배포)
   - [4. VPN Client 설정](#4-vpn-client-설정)
+    - [4.1 VPN 설정 파일 다운로드](#41-vpn-설정-파일-다운로드)
+    - [4.2 VPN 클라이언트 애플리케이션 설치](#42-vpn-클라이언트-애플리케이션-설치)
+    - [4.3 ovpn 설정 파일 수정](#43-ovpn-설정-파일-수정)
+    - [4.4 VPN 프로파일 생성](#44-vpn-프로파일-생성)
+    - [4.5 VPN 연결 및 인증](#45-vpn-연결-및-인증)
   - [5. 고급 설정](#5-고급-설정)
     - [5.1 그룹별 접근 제어](#51-그룹별-접근-제어)
     - [5.2 Self-Service Portal](#52-self-service-portal)
@@ -312,27 +317,92 @@ terraform output transit_gateway_id
 
 ## 4. VPN Client 설정
 
-1. AWS 콘솔의 Client VPN Endpoints에서 "Download Client Configuration" 클릭하거나, 다음 명령어로 다운로드:
+### 4.1 VPN 설정 파일 다운로드
 
-   ```bash
-   # Endpoint ID 확인
-   CLIENT_VPN_ID=$(terraform output -raw client_vpn_endpoint_id)
+AWS 콘솔 또는 CLI를 통해 VPN 클라이언트 설정 파일을 다운로드합니다.
+
+```bash
+# Endpoint ID 확인
+CLIENT_VPN_ID=$(terraform output -raw client_vpn_endpoint_id)
+
+# VPN Configuration 다운로드
+aws ec2 export-client-vpn-client-configuration \
+  --client-vpn-endpoint-id $CLIENT_VPN_ID \
+  --output text \
+  --region ap-northeast-2 > client-config.ovpn
+```
+
+### 4.2 VPN 클라이언트 애플리케이션 설치
+
+[AWS Client VPN 다운로드](https://aws.amazon.com/vpn/client-vpn-download/) 페이지에서 사용 중인 OS에 맞는 클라이언트를 설치합니다.
+
+### 4.3 ovpn 설정 파일 수정
+
+AWS 콘솔에서 다운로드한 `.ovpn` 파일은 SAML 인증 시 브라우저 리다이렉션의 안정성을 위해 접속 주소를 고정하는 수정 작업이 필요합니다.
+
+**CASE A: AWS 기본 주소 사용 (테스트용)**
+
+별도의 DNS 등록 없이 AWS 엔드포인트를 직접 사용합니다. 주소 앞에 임의의 문자(test.)를 붙여 와일드카드 DNS 응답을 유도합니다.
+
+```
+# 수정 전
+remote cvpn-endpoint-0abc123456789.prod.clientvpn.us-east-1.amazonaws.com 443
+remote-random-hostname
+
+# 수정 후
+remote test.cvpn-endpoint-0abc123456789.prod.clientvpn.us-east-1.amazonaws.com 443
+# remote-random-hostname  <-- 주석 처리 (제거)
+auth-federate             <-- SAML 인증 필수 옵션 추가
+```
+
+**CASE B: 사용자 정의 도메인 사용 (운영 권장)**
+
+회사 전용 도메인을 사용하여 사용자 편의성을 높입니다.
+
+```
+# 수정 전
+remote cvpn-endpoint-0abc123456789.prod.clientvpn.us-east-1.amazonaws.com 443
+remote-random-hostname
+
+# 수정 후
+remote vpn.cnapcloud.com 443
+# remote-random-hostname  <-- 주석 처리 (제거)
+auth-federate             <-- SAML 인증 필수 옵션 추가
+```
+
+이 경우는 다음과 같이 인증서 구성과 도메인 등록 작업이 필요합니다:
+
+**서버 인증서 구성**  
+```makefile
+# cert/Makefile의 환경 변수 예시
+COMMON_NAME ?= aws-vpn-dev
+ALT_NAMES ?= DNS:$(COMMON_NAME),DNS:vpn.cnapcloud.com,DNS:*.vpn.cnapcloud.com
+```
+
+**DNS 도메인 등록**  
+도메인 관리자(Route 53 등)에서 커스텀 도메인이 AWS VPN 엔드포인트를 가리키도록 설정합니다.
    
-   # VPN Configuration 다운로드
-   aws ec2 export-client-vpn-client-configuration \
-     --client-vpn-endpoint-id $CLIENT_VPN_ID \
-     --output text \
-     --region ap-northeast-2 > client-config.ovpn
-   ```
+| 레코드 이름 | 레코드 유형 | 값 (Target) |
+|-----------|-----------|-----------|
+| vpn | CNAME | cvpn-endpoint-0abc123456789...amazonaws.com |
 
-2. VPN 클라이언트 애플리케이션 설치 ([AWS Client VPN 다운로드](https://aws.amazon.com/vpn/client-vpn-download/))
 
-3. 다운로드한 `client-config.ovpn` 설정 파일로 VPN 연결 생성
+### 4.4 VPN 프로파일 생성
 
-4. VPN 연결 시 Keycloak 계정으로 SAML 인증
+VPN 클라이언트 애플리케이션에서:
+1. 프로파일 관리 메뉴 열기
+2. 프로파일 추가 클릭
+3. 프로파일 이름 입력 (예: "AWS-VPN")
+4. 다운로드한 `client-config.ovpn` 파일 선택
+5. 저장
 
-   > 브라우저가 자동으로 열려 Keycloak 로그인 페이지로 리다이렉트됩니다.
-   > Keycloak 계정으로 인증 후 VPN 연결이 수립됩니다.
+### 4.5 VPN 연결 및 인증
+
+1. VPN 클라이언트에서 생성한 프로파일 선택
+2. **연결** 버튼 클릭
+3. 브라우저가 자동으로 열려 Keycloak 로그인 페이지로 리다이렉트됨
+4. Keycloak 계정으로 인증 수행
+5. 인증 완료 후 VPN 연결 자동 수립
 
 
 ## 5. 고급 설정

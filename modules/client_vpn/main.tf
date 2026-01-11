@@ -90,16 +90,6 @@ resource "aws_ec2_client_vpn_authorization_rule" "spoke_vpcs" {
   depends_on = [aws_ec2_client_vpn_network_association.primary]
 }
 
-# Route - Hub VPC CIDR
-resource "aws_ec2_client_vpn_route" "vpc_access" {
-  client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.keycloak.id
-  destination_cidr_block = var.vpc_cidr
-  target_vpc_subnet_id   = aws_ec2_client_vpn_network_association.primary.subnet_id
-  description            = "Route for Hub VPC CIDR access"
-  
-  depends_on = [aws_ec2_client_vpn_network_association.primary]
-}
-
 # Routes - Spoke VPCs via TGW
 resource "aws_ec2_client_vpn_route" "spoke_vpcs" {
   for_each               = toset(var.spoke_vpc_cidrs_list)
