@@ -277,7 +277,7 @@ hub_secondary_subnet_id = "subnet-yyyyy"   # HA 구성 권장
 vpn_client_cidr_block  = "172.31.0.0/16"
 split_tunnel_enabled   = true
 connection_log_enabled = false
-server_certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/xxxxx"
+server_certificate_arn = "arn:aws:acm:ap-northeast-2:xxxx:certificate/xxxxx"
 
 # Transit Gateway - Spoke VPC 구성 (DEV/STG/PRD)
 spoke_vpcs = {
