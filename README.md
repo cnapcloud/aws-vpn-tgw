@@ -21,7 +21,7 @@
     - [3.3 Validation Rules](#33-validation-rules)
     - [3.4 CloudWatch 로그 그룹 설정](#34-cloudwatch-로그-그룹-설정)
     - [3.5 terraform.tfvars 파일 생성](#35-terraformtfvars-파일-생성)
-    - [3.5 Terraform 배포](#35-terraform-배포)
+    - [3.6 Terraform 배포](#36-terraform-배포)
   - [4. VPN Client 설정](#4-vpn-client-설정)
     - [4.1 VPN 설정 파일 다운로드](#41-vpn-설정-파일-다운로드)
     - [4.2 VPN 클라이언트 애플리케이션 설치](#42-vpn-클라이언트-애플리케이션-설치)
@@ -318,7 +318,7 @@ spoke_vpc_route_table_ids = {
 }
 ```
 
-### 3.5 Terraform 배포
+### 3.6 Terraform 배포
 
 ```bash
 # Terraform 초기화 및 배포
