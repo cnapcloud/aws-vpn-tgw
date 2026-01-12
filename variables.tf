@@ -48,8 +48,8 @@ variable "spoke_vpc_cidrs" {
 }
 
 variable "spoke_vpc_route_table_ids" {
-  description = "Map of Spoke VPC IDs to their route table IDs for adding TGW routes"
-  type        = map(string)
+  description = "Map of Spoke VPC IDs to list of route table IDs for adding TGW routes"
+  type        = map(list(string))
   default     = {}
 }
 
@@ -64,9 +64,19 @@ variable "hub_vpc_cidr" {
   type        = string
 }
 
-variable "hub_route_table_id" {
-  description = "Hub VPC Route Table ID for adding routes to Spoke VPCs"
-  type        = string
+variable "hub_route_table_ids" {
+  description = "List of Hub VPC Route Table IDs for adding routes to Spoke VPCs"
+  type        = list(string)
+}
+
+variable "hub_tgw_subnet_ids" {
+  description = "List of Hub VPC subnet IDs for TGW attachment (minimum 2 for multi-AZ)"
+  type        = list(string)
+  
+  validation {
+    condition     = length(var.hub_tgw_subnet_ids) >= 2
+    error_message = "Hub VPC must have at least 2 subnets for TGW attachment (multi-AZ requirement)."
+  }
 }
 
 variable "hub_primary_subnet_id" {
@@ -75,9 +85,8 @@ variable "hub_primary_subnet_id" {
 }
 
 variable "hub_secondary_subnet_id" {
-  description = "Hub VPC secondary subnet for Client VPN ENI (HA)"
+  description = "Hub VPC secondary subnet for Client VPN ENI (required for HA)"
   type        = string
-  default     = null
 }
 
 # VPN 클라이언트 설정
@@ -106,13 +115,19 @@ variable "split_tunnel_enabled" {
 variable "connection_log_enabled" {
   description = "Enable VPN connection logging"
   type        = bool
-  default     = false
+  default     = true
 }
 
-# Keycloak SAML 인증
-variable "saml_provider_name" {
-  description = "Name of the SAML provider for Keycloak VPN authentication"
-  type        = string
+variable "create_vpn_log_group" {
+  description = "Whether to create CloudWatch Log Group for VPN (set false if using existing log group)"
+  type        = bool
+  default     = true
+}
+
+variable "create_tgw_log_group" {
+  description = "Whether to create CloudWatch Log Group for TGW Flow Logs (set false if using existing log group)"
+  type        = bool
+  default     = true
 }
 
 variable "saml_metadata_file_path" {

@@ -35,9 +35,8 @@ variable "hub_primary_subnet_id" {
 }
 
 variable "hub_secondary_subnet_id" {
-  description = "Hub VPC secondary subnet ID for Client VPN target network (optional, for HA)"
+  description = "Hub VPC secondary subnet ID for Client VPN target network (required for HA)"
   type        = string
-  default     = null
 }
 
 variable "vpn_client_cidr_block" {
@@ -60,7 +59,13 @@ variable "split_tunnel_enabled" {
 variable "connection_log_enabled" {
   description = "Enable connection logging for VPN endpoint"
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "create_vpn_log_group" {
+  description = "Whether to create CloudWatch Log Group for VPN (set false if using existing log group)"
+  type        = bool
+  default     = true
 }
 
 variable "spoke_vpc_cidrs_list" {

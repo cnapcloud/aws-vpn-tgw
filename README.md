@@ -22,6 +22,7 @@
     - [3.4 CloudWatch 로그 그룹 설정](#34-cloudwatch-로그-그룹-설정)
     - [3.5 terraform.tfvars 파일 생성](#35-terraformtfvars-파일-생성)
     - [3.6 Terraform 배포](#36-terraform-배포)
+    - [3.7 초기 배포 후 Route 확인 (중요)](#37-초기-배포-후-route-확인-중요)
   - [4. VPN Client 설정](#4-vpn-client-설정)
     - [4.1 VPN 설정 파일 다운로드](#41-vpn-설정-파일-다운로드)
     - [4.2 VPN 클라이언트 애플리케이션 설치](#42-vpn-클라이언트-애플리케이션-설치)
@@ -32,6 +33,13 @@
     - [5.1 그룹별 접근 제어](#51-그룹별-접근-제어)
     - [5.2 Self-Service Portal](#52-self-service-portal)
   - [6. 문제 해결](#6-문제-해결)
+    - [6.1 VPN 연결 문제](#61-vpn-연결-문제)
+    - [6.2 Hub VPC에서 Spoke VPC 연결 안 됨](#62-hub-vpc에서-spoke-vpc-연결-안-됨)
+    - [6.3 VPN Client에서 Spoke VPC 연결 안 됨](#63-vpn-client에서-spoke-vpc-연결-안-됨)
+      - [시나리오 1: 초기 배포 후 처음 연결 시](#시나리오-1-초기-배포-후-처음-연결-시)
+      - [시나리오 2: spoke\_vpc\_cidrs\_list 변경 후](#시나리오-2-spoke_vpc_cidrs_list-변경-후)
+      - [시나리오 3: Route는 있지만 연결 안 됨](#시나리오-3-route는-있지만-연결-안-됨)
+    - [6.4 Spoke VPC 보안 그룹 설정](#64-spoke-vpc-보안-그룹-설정)
   - [7. 정리](#7-정리)
   - [참고자료](#참고자료)
 
@@ -333,6 +341,37 @@ terraform output vpn_security_group_id
 terraform output transit_gateway_id
 ```
 
+### 3.7 초기 배포 후 Route 확인 (중요)
+
+**⚠️ 초기 배포 후 VPN 연결 전에 반드시 확인하세요!**
+
+Terraform apply 완료 후 Client VPN route가 active 상태가 되기까지 1-2분이 소요됩니다. VPN 클라이언트가 최초 연결 시 이 route들을 받기 때문에, 연결 전에 모든 route가 준비되었는지 확인해야 합니다.
+
+```bash
+# 1. Client VPN Endpoint ID 확인
+CLIENT_VPN_ID=$(terraform output -raw client_vpn_endpoint_id)
+
+# 2. Route 상태 확인 (1-2분 대기 후)
+aws ec2 describe-client-vpn-routes \
+  --client-vpn-endpoint-id $CLIENT_VPN_ID \
+  --region ap-northeast-2
+
+# 3. 모든 route의 Status.Code가 "active"인지 확인
+# 예시 출력:
+# "Status": {
+#     "Code": "active"  <- 이것이 모든 route에서 "active"여야 함
+# }
+```
+
+**Route 상태 확인 시나리오:**
+- ✅ **모든 route가 active**: VPN 연결 진행 가능
+- ❌ **일부 route가 creating/pending**: 1-2분 더 대기 후 재확인
+- ❌ **일부 route가 failed**: TGW attachment, subnet, route table 설정 확인 필요
+
+**주의사항:**
+- Route가 active 상태가 아닌 상태에서 VPN에 연결하면, 해당 CIDR로 접근이 불가능합니다
+- 이 경우 VPN을 재연결하거나, route 문제를 해결한 후 재연결해야 합니다
+
 ## 4. VPN Client 설정
 
 ### 4.1 VPN 설정 파일 다운로드
@@ -454,23 +493,120 @@ aws ec2 modify-client-vpn-endpoint \
 
 ## 6. 문제 해결
 
-1. VPN 연결 실패
+### 6.1 VPN 연결 문제
+
+**1. VPN 연결 실패**
 - Security Group의 443 포트가 열려있는지 확인
 - `config/idp-metadata.xml` 파일이 올바른 메타데이터를 포함하는지 확인
 - ACM 인증서가 유효하고 올바른 ARN인지 확인
+- SAML assertion 유효시간 확인 (Keycloak과 AWS 서버 시간이 동기화되어 있는지 확인)
 
-2. SAML 인증 실패
+**2. SAML 인증 실패**
 - `config/idp-metadata.xml` 메타데이터가 현재 Keycloak 설정과 일치하는지 확인
 - Keycloak의 SAML 클라이언트 설정 확인
 - Keycloak 사용자가 적절한 그룹에 속해있는지 확인
 
-4. 접근 권한 오류
+**3. 접근 권한 오류**
 - Authorization Rule 설정 확인
 - Keycloak 그룹 설정 확인
 - SAML 응답의 group attribute 확인
 
-5. 방화벽 설정
-- client vpn에서 접근하는 자원에 대한 방확의 소스 keycloak-vpn-sg 설정
+**4. 방화벽 설정**
+- Client VPN에서 접근하는 자원에 대한 방화벽의 소스를 keycloak-vpn-sg로 설정
+
+### 6.2 Hub VPC에서 Spoke VPC 연결 안 됨
+
+**원인:** EC2가 있는 subnet이 TGW에 연결되지 않음
+
+**해결:**
+terraform.tfvars에 EC2 subnet 추가 후 apply
+```hcl
+hub_tgw_subnet_ids = [
+  "subnet-xxx",  # VPN Subnet
+  "subnet-yyy",  # VPN Subnet
+  "subnet-zzz"   # EC2 Subnet (추가)
+]
+```
+
+### 6.3 VPN Client에서 Spoke VPC 연결 안 됨
+
+**원인:** Split tunnel 모드에서 route는 연결 시 동적으로 push됨
+
+**시나리오별 해결 방법:**
+
+#### 시나리오 1: 초기 배포 후 처음 연결 시
+
+1. **AWS에서 Route 상태 확인:**
+   ```bash
+   CLIENT_VPN_ID=$(terraform output -raw client_vpn_endpoint_id)
+   aws ec2 describe-client-vpn-routes \
+     --client-vpn-endpoint-id $CLIENT_VPN_ID \
+     --query 'Routes[*].[DestinationCidr,Status.Code]' \
+     --output table
+   ```
+
+2. **모든 route가 "active"인지 확인**
+   - ✅ Active: VPN 연결 진행
+   - ❌ Creating/Pending: 1-2분 대기 후 재확인
+   - ❌ Failed: TGW, subnet, authorization rule 확인
+
+3. **VPN 연결 후 클라이언트 route 확인:**
+   ```bash
+   # macOS/Linux
+   netstat -rn | grep "10\."  # Spoke CIDR이 보여야 함
+   
+   # Windows
+   route print | findstr "10."
+   ```
+
+#### 시나리오 2: spoke_vpc_cidrs_list 변경 후
+
+1. **Terraform apply로 route 변경:**
+   ```bash
+   terraform apply
+   ```
+
+2. **모든 VPN 사용자에게 재연결 안내** (필수!)
+   - 재연결하지 않으면 새 CIDR로 접근 불가
+   - 기존 연결된 사용자는 이전 route만 유지
+
+3. **재연결 후 클라이언트 route 확인:**
+   ```bash
+   netstat -rn | grep "10\."  # 새로 추가된 CIDR이 보여야 함
+   ```
+
+#### 시나리오 3: Route는 있지만 연결 안 됨
+
+1. **Authorization Rule 확인:**
+   ```bash
+   aws ec2 describe-client-vpn-authorization-rules \
+     --client-vpn-endpoint-id $CLIENT_VPN_ID
+   ```
+   - Spoke VPC CIDR에 대한 authorization rule이 있는지 확인
+
+2. **TGW Route Table 확인:**
+   ```bash
+   TGW_ID=$(terraform output -raw transit_gateway_id)
+   aws ec2 describe-transit-gateway-route-tables \
+     --transit-gateway-id $TGW_ID
+   ```
+
+3. **Spoke VPC 보안 그룹 확인:**
+   - VPN 클라이언트 CIDR (예: 172.31.0.0/16)에서의 인바운드 허용 확인
+
+> ⚠️ **중요:** Terraform으로 route 변경 (`spoke_vpc_cidrs_list` 추가/삭제) 후 모든 VPN 사용자는 재연결 필요
+
+### 6.4 Spoke VPC 보안 그룹 설정
+
+**증상:** TCP는 되지만 ping/traceroute가 안 됨
+
+**해결 방법:**
+Spoke VPC의 EC2 보안 그룹에 ICMP 추가:
+```bash
+aws ec2 authorize-security-group-ingress \
+  --group-id <spoke-sg-id> \
+  --ip-permissions IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges='[{CidrIp=0.0.0.0/0}]'
+```
 
 ## 7. 정리
 

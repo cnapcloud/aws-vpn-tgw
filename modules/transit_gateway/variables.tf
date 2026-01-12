@@ -40,8 +40,8 @@ variable "spoke_vpc_cidrs" {
 }
 
 variable "spoke_vpc_route_table_ids" {
-  description = "Map of Spoke VPC IDs to their route table IDs for adding TGW routes to Hub"
-  type        = map(string)
+  description = "Map of Spoke VPC IDs to list of route table IDs for adding TGW routes to Hub"
+  type        = map(list(string))
   default     = {}
 }
 
@@ -55,23 +55,28 @@ variable "hub_vpc_cidr" {
   type        = string
 }
 
-variable "hub_route_table_id" {
-  description = "Hub VPC Route Table ID for adding routes to Spoke VPCs"
-  type        = string
+variable "hub_route_table_ids" {
+  description = "List of Hub VPC Route Table IDs for adding routes to Spoke VPCs"
+  type        = list(string)
 }
 
-variable "hub_primary_subnet_id" {
-  description = "Hub VPC primary subnet ID for TGW attachment"
-  type        = string
-}
-
-variable "hub_secondary_subnet_id" {
-  description = "Hub VPC secondary subnet ID for TGW attachment (optional for HA)"
-  type        = string
-  default     = null
+variable "hub_tgw_subnet_ids" {
+  description = "List of Hub VPC subnet IDs for TGW attachment (minimum 2 for multi-AZ)"
+  type        = list(string)
+  
+  validation {
+    condition     = length(var.hub_tgw_subnet_ids) >= 2
+    error_message = "Hub VPC must have at least 2 subnets for TGW attachment (multi-AZ requirement)."
+  }
 }
 
 variable "vpn_client_cidr_block" {
   description = "VPN client CIDR block for routing configuration"
   type        = string
+}
+
+variable "create_tgw_log_group" {
+  description = "Whether to create CloudWatch Log Group for TGW Flow Logs (set false if using existing log group)"
+  type        = bool
+  default     = true
 }
