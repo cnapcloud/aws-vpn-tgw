@@ -79,16 +79,6 @@ variable "hub_tgw_subnet_ids" {
   }
 }
 
-variable "hub_primary_subnet_id" {
-  description = "Hub VPC primary subnet for Client VPN ENI"
-  type        = string
-}
-
-variable "hub_secondary_subnet_id" {
-  description = "Hub VPC secondary subnet for Client VPN ENI (required for HA)"
-  type        = string
-}
-
 # VPN 클라이언트 설정
 variable "vpn_client_cidr_block" {
   description = "VPN Client CIDR block (must not overlap with VPC CIDRs)"

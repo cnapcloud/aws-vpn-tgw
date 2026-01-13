@@ -119,11 +119,16 @@ resource "aws_ec2_client_vpn_route" "spoke_vpcs" {
   for_each               = toset(var.spoke_vpc_cidrs_list)
   client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.keycloak.id
   destination_cidr_block = each.value
-  target_vpc_subnet_id   = var.hub_primary_subnet_id
+  target_vpc_subnet_id   = var.hub_secondary_subnet_id
   description            = "Route to Spoke VPC ${each.value} via TGW"
   
   depends_on = [
     aws_ec2_client_vpn_network_association.primary,
     aws_ec2_client_vpn_network_association.secondary
   ]
+
+  timeouts {
+    create = "15m"
+    delete = "15m"  # 삭제 타임아웃을 10분으로 증가
+  }
 }

@@ -33,8 +33,8 @@ module "client_vpn" {
   # Hub VPC 설정
   vpc_id                  = var.hub_vpc_id
   vpc_cidr                = var.hub_vpc_cidr
-  hub_primary_subnet_id   = var.hub_primary_subnet_id
-  hub_secondary_subnet_id = var.hub_secondary_subnet_id
+  hub_primary_subnet_id   = var.hub_tgw_subnet_ids[0]
+  hub_secondary_subnet_id = var.hub_tgw_subnet_ids[1]
 
   # VPN 클라이언트 설정
   vpn_client_cidr_block  = var.vpn_client_cidr_block

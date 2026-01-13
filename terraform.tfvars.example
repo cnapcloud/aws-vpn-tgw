@@ -5,24 +5,26 @@ project_name = "aws-vpn-tgw"
 tags         = { CreatedBy = "Terraform" }
 
 # Hub VPC Configuration (VPN이 배포되는 중앙 허브)
-hub_vpc_id              = "vpc-xxxxxxxxx"          # Hub VPC ID
-hub_vpc_cidr            = "10.0.0.0/16"            # Hub VPC CIDR
-hub_primary_subnet_id   = "subnet-xxxxxxxxx"       # Hub VPC Subnet 1
-hub_secondary_subnet_id = "subnet-yyyyyyyyy"       # Hub VPC Subnet 2
-hub_route_table_id      = "rtb-xxxxxxxxx"          # Hub VPC Route Table
+hub_vpc_id              = "vpc-034b880b82a8fa18a"          # Hub VPC ID
+hub_vpc_cidr            = "172.31.0.0/16"                  # Hub VPC CIDR
+
+# Hub VPC TGW Attachment Subnets (TGW ENI가 생성될 subnet들, 최소 2개 필요)
+hub_tgw_subnet_ids = [
+  "subnet-0850f030aa8ff5265",   # AZ-a (VPN도 사용)
+  "subnet-018e83fac1c0bd1fb",   # AZ-b (VPN도 사용)
+  "subnet-0759da3d1b1213e47"    # AZ-c (EC2가 있는 subnet)
+]
+
+# Hub VPC Route Tables (Spoke VPC CIDR route를 추가할 route table들)
+hub_route_table_ids = [
+  "rtb-0b81a4e75b2b650ce"       # Main route table
+]
 
 # Spoke VPCs Configuration (Hub를 통해 접근할 격리된 환경들)
 spoke_vpcs = {
   # "vpc-11111111" = ["subnet-aaaaaaaa", "subnet-bbbbbbbb"]   # DEV 환경
   # "vpc-22222222" = ["subnet-cccccccc", "subnet-dddddddd"]   # STG 환경
   # "vpc-33333333" = ["subnet-eeeeeeee", "subnet-ffffffff"]   # PRD 환경
-}
-
-# Spoke VPC CIDR (Hub에서 이 대역으로 라우팅)
-spoke_vpc_cidrs = {
-  # "vpc-11111111" = "10.1.0.0/16"   # DEV 환경
-  # "vpc-22222222" = "10.2.0.0/16"   # STG 환경
-  # "vpc-33333333" = "10.3.0.0/16"   # PRD 환경
 }
 
 # Spoke VPC Route Table IDs (각 Spoke에서 Hub로 라우팅 추가)

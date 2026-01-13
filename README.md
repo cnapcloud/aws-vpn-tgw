@@ -18,11 +18,11 @@
     - [2.4 Spoke VPCs 정보 (DEV/STG/PRD - Spoke, 선택사항)\*\*](#24-spoke-vpcs-정보-devstgprd---spoke-선택사항)
   - [3. Terraform 설정 및 배포](#3-terraform-설정-및-배포)
     - [3.1 변수 구성](#31-변수-구성)
-    - [3.3 Validation Rules](#33-validation-rules)
-    - [3.4 CloudWatch 로그 그룹 설정](#34-cloudwatch-로그-그룹-설정)
-    - [3.5 terraform.tfvars 파일 생성](#35-terraformtfvars-파일-생성)
-    - [3.6 Terraform 배포](#36-terraform-배포)
-    - [3.7 초기 배포 후 Route 확인 (중요)](#37-초기-배포-후-route-확인-중요)
+    - [3.2 Validation Rules](#32-validation-rules)
+    - [3.3 CloudWatch 로그 그룹 설정](#33-cloudwatch-로그-그룹-설정)
+    - [3.4 terraform.tfvars 파일 생성](#34-terraformtfvars-파일-생성)
+    - [3.5 Terraform 배포](#35-terraform-배포)
+    - [3.6 초기 배포 후 Route 확인 (중요)](#36-초기-배포-후-route-확인-중요)
   - [4. VPN Client 설정](#4-vpn-client-설정)
     - [4.1 VPN 설정 파일 다운로드](#41-vpn-설정-파일-다운로드)
     - [4.2 VPN 클라이언트 애플리케이션 설치](#42-vpn-클라이언트-애플리케이션-설치)
@@ -40,6 +40,7 @@
       - [시나리오 2: spoke\_vpc\_cidrs\_list 변경 후](#시나리오-2-spoke_vpc_cidrs_list-변경-후)
       - [시나리오 3: Route는 있지만 연결 안 됨](#시나리오-3-route는-있지만-연결-안-됨)
     - [6.4 Spoke VPC 보안 그룹 설정](#64-spoke-vpc-보안-그룹-설정)
+    - [6.5 라우팅 구성 확인](#65-라우팅-구성-확인)
   - [7. 정리](#7-정리)
   - [참고자료](#참고자료)
 
@@ -253,7 +254,7 @@ Keycloak에서 VPN용 SAML 메타데이터를 준비합니다:
 | `spoke_vpc_cidrs` | Spoke VPC의 CIDR 맵 (라우팅 및 Authorization Rule용) | `{}` | N |
 | `spoke_vpc_route_table_ids` | Spoke VPC의 Route Table ID 맵 (Hub로 라우트 자동 추가) | `{}` | N |
 
-### 3.3 Validation Rules
+### 3.2 Validation Rules
 
 Terraform이 다음 사항을 자동 검증합니다.
 
@@ -262,7 +263,7 @@ Terraform이 다음 사항을 자동 검증합니다.
   - `spoke_vpcs`: 각 Spoke VPC는 최소 2개 서브넷 필요 (TGW Multi-AZ 요구사항)
   - `spoke_vpc_cidrs`: 모든 CIDR 블록이 유효한 형식
 
-### 3.4 CloudWatch 로그 그룹 설정
+### 3.3 CloudWatch 로그 그룹 설정
 
 Client VPN 연결 로그를 위한 CloudWatch 로그 그룹이 자동으로 생성됩니다.
 - **로그 그룹명**: `/aws/clientvpn/${var.environment}-keycloak-vpn`
@@ -279,7 +280,7 @@ aws logs delete-log-group --log-group-name "/aws/clientvpn/prod-keycloak-vpn" --
 terraform import 'module.client_vpn.aws_cloudwatch_log_group.vpn_logs' "/aws/clientvpn/prod-keycloak-vpn"
 ```
 
-### 3.5 terraform.tfvars 파일 생성
+### 3.4 terraform.tfvars 파일 생성
 
 ```hcl
 # AWS 기본 설정
@@ -326,22 +327,68 @@ spoke_vpc_route_table_ids = {
 }
 ```
 
-### 3.6 Terraform 배포
+### 3.5 Terraform 배포
 
+1. Terraform 초기화 및 배포
 ```bash
-# Terraform 초기화 및 배포
 terraform init 
 terraform plan 
 terraform apply
+```
 
-# 배포 완료 후 출력값 확인
+2. 출력결과
+```bash
+terraform output
+
+# 예상 출력
+client_vpn_client_cidr_block = "172.31.0.0/16"
+ client_vpn_dns_name = "*.cvpn-endpoint-0b78581f0492882f1.prod.clientvpn.ap-northeast-2.amazonaws.com"
+ client_vpn_endpoint_arn = "arn:aws:ec2:ap-northeast-2:***:client-vpn-endpoint/cvpn-endpoint-0b78581f0492882f1"
+ client_vpn_endpoint_id = "cvpn-endpoint-0b78581f0492882f1"
+ saml_provider_arn = "arn:aws:iam::***:saml-provider/keycloak-vpn-saml-prd"
+ target_network_associations = {
+   "primary" = "cvpn-assoc-0da30997ebefd377e"
+   "secondary" = "cvpn-assoc-010acc4e4a7041601"
+ }
+ transit_gateway_arn = "arn:aws:ec2:ap-northeast-2:***:transit-gateway/tgw-00ec02f84b128b17a"
+ transit_gateway_id = "tgw-00ec02f84b128b17a"
+ transit_gateway_route_table_id = "tgw-rtb-0ba8e5a3c29b1d888"
+ vpc_attachments = {
+   "hub_vpc" = {
+     "id" = "tgw-attach-023eca0b153ded9c1"
+     "subnet_ids" = toset([
+       "subnet-018e83fac1c0bd1fb",
+       "subnet-0759da3d1b1213e47",
+       "subnet-0850f030aa8ff5265",
+     ])
+     "transit_gateway_id" = "tgw-00ec02f84b128b17a"
+     "vpc_id" = "vpc-034b880b82a8fa18a"
+   }
+   "spoke_vpcs" = {
+     "vpc-04f77c63f7828516a" = {
+       "id" = "tgw-attach-07b92ba2400a8fd54"
+       "subnet_ids" = toset([
+         "subnet-00aae983abcb2dea8",
+         "subnet-0d621ab4b16a9b393",
+       ])
+       "transit_gateway_id" = "tgw-00ec02f84b128b17a"
+       "vpc_id" = "vpc-04f77c63f7828516a"
+     }
+   }
+ }
+ vpn_log_group_name = "/aws/clientvpn/keycloak-vpn-prd"
+```
+
+
+3. 개별 Output 확인
+```bash
 terraform output client_vpn_endpoint_id
 terraform output saml_provider_arn
 terraform output vpn_security_group_id
 terraform output transit_gateway_id
 ```
 
-### 3.7 초기 배포 후 Route 확인 (중요)
+### 3.6 초기 배포 후 Route 확인 (중요)
 
 **⚠️ 초기 배포 후 VPN 연결 전에 반드시 확인하세요!**
 
@@ -553,8 +600,11 @@ hub_tgw_subnet_ids = [
 3. **VPN 연결 후 클라이언트 route 확인:**
    ```bash
    # macOS/Linux
-   netstat -rn | grep "10\."  # Spoke CIDR이 보여야 함
-   
+   netstat -rn | grep "^10"  # Spoke CIDR이 보여야 함
+   ---
+   default            link#20            UCSIg           bridge100      !
+   10/16              100.30.0.1         UGSc                utun6 
+
    # Windows
    route print | findstr "10."
    ```
@@ -572,7 +622,7 @@ hub_tgw_subnet_ids = [
 
 3. **재연결 후 클라이언트 route 확인:**
    ```bash
-   netstat -rn | grep "10\."  # 새로 추가된 CIDR이 보여야 함
+   netstat -rn | grep "^10"  # 새로 추가된 CIDR이 보여야 함
    ```
 
 #### 시나리오 3: Route는 있지만 연결 안 됨
@@ -608,6 +658,87 @@ aws ec2 authorize-security-group-ingress \
   --ip-permissions IpProtocol=icmp,FromPort=-1,ToPort=-1,IpRanges='[{CidrIp=0.0.0.0/0}]'
 ```
 
+
+### 6.5 라우팅 구성 확인
+
+1. Client VPN 엔드포인트 라우팅 확인
+```bash
+ aws ec2 describe-client-vpn-routes \
+   --client-vpn-endpoint-id cvpn-endpoint-043254bde701047f7 \
+   --query "Routes[*].{Dest:DestinationCidr, Target:TargetSubnet, State:Status.Code, Type:Type}" \
+   --output table
+ -----------------------------------------------------------------
+ |                    DescribeClientVpnRoutes                    |
+ +----------------+---------+----------------------------+-------+
+ |      Dest      |  State  |          Target            | Type  |
+ +----------------+---------+----------------------------+-------+
+ |  172.31.0.0/16 |  active |  subnet-018e83fac1c0bd1fb  |  Nat  |
+ |  172.31.0.0/16 |  active |  subnet-0850f030aa8ff5265  |  Nat  |
+ |  10.0.0.0/16   |  active |  subnet-0850f030aa8ff5265  |  Nat  |
+ +----------------+---------+----------------------------+-------+
+ ```
+
+2. Transit Gateway(TGW) 라우팅 테이블 확인
+```bash
+TGW_RT_ID=$(aws ec2 describe-transit-gateway-route-tables \
+  --filters "Name=transit-gateway-id,Values=tgw-026e0998551152c58" \
+  --query 'TransitGatewayRouteTables[0].TransitGatewayRouteTableId' --output text)
+
+aws ec2 search-transit-gateway-routes \
+  --transit-gateway-route-table-id "$TGW_RT_ID" \
+  --filters "Name=state,Values=active" \
+  --query "Routes[*].{Dest:DestinationCidrBlock, Type:Type, Target:TransitGatewayAttachments[0].TransitGatewayAttachmentId}" \
+  --output table
+-----------------------------------------------------------------
+|                  SearchTransitGatewayRoutes                   |
++----------------+--------------------------------+-------------+
+|      Dest      |            Target              |    Type     |
++----------------+--------------------------------+-------------+
+|  10.0.0.0/16   |  tgw-attach-0834048b83afff405  |  propagated |
+|  100.30.0.0/16 |  tgw-attach-0efbcf18c4f7d9480  |  static     |
+|  172.31.0.0/16 |  tgw-attach-0efbcf18c4f7d9480  |  propagated |
++----------------+--------------------------------+-------------+
+```
+ 
+3.Hub VPC 라우팅 테이블 확인
+```bash
+HUB_RT_ID="rtb-0b81a4e75b2b650ce"  
+
+aws ec2 describe-route-tables \
+  --route-table-ids $HUB_RT_ID \
+  --query "RouteTables[0].Routes[*].{Dest:DestinationCidrBlock, TGW:TransitGatewayId, IGW:GatewayId, State:State}" \
+  --output table
+-------------------------------------------------------------------------------
+|                             DescribeRouteTables                             |
++---------------+-------------------------+---------+-------------------------+
+|     Dest      |           IGW           |  State  |           TGW           |
++---------------+-------------------------+---------+-------------------------+
+|  172.31.0.0/16|  local                  |  active |  None                   |
+|  10.0.0.0/16  |  None                   |  active |  tgw-026e0998551152c58  |
+|  0.0.0.0/0    |  igw-0c8aadb4f134d9a6b  |  active |  None                   |
++---------------+-------------------------+---------+-------------------------+
+```
+
+4. Spoke VPC 라우팅 테이블 확인
+```bash
+SPOKE_RT_ID="rtb-0dfaec5ab7960837d" # "rtb-0c7e523fbf4056473", ....
+
+aws ec2 describe-route-tables \
+  --route-table-ids $SPOKE_RT_ID \
+  --query "RouteTables[0].Routes[*].{Dest:DestinationCidrBlock, Gateway:TransitGatewayId, State:State}" \
+  --output table
+------------------------------------------------------
+|                 DescribeRouteTables                |
++----------------+-------------------------+---------+
+|      Dest      |         Gateway         |  State  |
++----------------+-------------------------+---------+
+|  172.31.0.0/16 |  tgw-026e0998551152c58  |  active |
+|  10.0.0.0/16   |  None                   |  active |
+|  100.30.0.0/16 |  tgw-026e0998551152c58  |  active |
++----------------+-------------------------+---------+
+```
+
+
 ## 7. 정리
 
 다음과 같이 Terraform으로 배포한 리소스를 삭제힙니다.
@@ -615,6 +746,9 @@ aws ec2 authorize-security-group-ingress \
 ```bash
 terraform destroy
 ```
+
+EC2 Client VPN Route를 지우다가  timeout이 발생하면 재시도 합니다.
+
 
 ## 참고자료
 
