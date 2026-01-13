@@ -127,6 +127,7 @@ resource "aws_ec2_client_vpn_route" "spoke_vpcs" {
     aws_ec2_client_vpn_network_association.secondary
   ]
 
+  # 이 작업은 생성이나 삭제에 다소 시간이 오래 걸림, timeout 발생시 재시도 필요
   timeouts {
     create = "15m"
     delete = "15m"  # 삭제 타임아웃을 10분으로 증가
